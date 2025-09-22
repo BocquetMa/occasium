@@ -1,7 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { compare } from '../../../../utils/hash';
-import { signJwt } from '../../../../utils/jwt';
-import { prisma } from '../../../../lib/prisma';
+import { prisma } from '../../../lib/prisma';
+import { compare } from '../../../utils/hash';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end();
@@ -15,13 +17,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const valid = await compare(password, user.password);
   if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-  const token = signJwt({ id: user.id, email: user.email, role: user.role });
-
-  res.setHeader(
-    'Set-Cookie',
-    `token=${token}; HttpOnly; Path=/; Max-Age=${7 * 24 * 60 * 60}; SameSite=Lax`
-  );
+  const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
 
   const { password: _, ...publicUser } = user;
-  res.status(200).json({ success: true, user: publicUser });
+  res.status(200).json({ success: true, token, user: publicUser });
 }

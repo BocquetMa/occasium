@@ -1,15 +1,14 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import { NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
 import { requireAuth, AuthRequest } from '../../../../middleware/auth';
 
 const prisma = new PrismaClient();
 
-async function handler(req: NextApiRequest | AuthRequest, res: NextApiResponse) {
+async function handler(req: AuthRequest, res: NextApiResponse) {
   const { id } = req.query;
   if (!id || Array.isArray(id)) return res.status(400).json({ message: 'Invalid id' });
 
-  const authReq = req as AuthRequest;
-  if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+  if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
 
   try {
     const event = await prisma.event.findUnique({
@@ -23,20 +22,20 @@ async function handler(req: NextApiRequest | AuthRequest, res: NextApiResponse) 
         return res.status(400).json({ message: 'Event full' });
       }
 
-      const existing = await prisma.registration.findFirst({
-        where: { userId: authReq.user.id, eventId: event.id },
+      const existing = await prisma.eventRegistration.findFirst({
+        where: { userId: req.user.id, eventId: event.id },
       });
       if (existing) return res.status(400).json({ message: 'Already registered' });
 
-      const registration = await prisma.registration.create({
-        data: { userId: authReq.user.id, eventId: event.id },
+      const registration = await prisma.eventRegistration.create({
+        data: { userId: req.user.id, eventId: event.id },
       });
       return res.status(201).json(registration);
     }
 
     if (req.method === 'DELETE') {
-      await prisma.registration.deleteMany({
-        where: { userId: authReq.user.id, eventId: event.id },
+      await prisma.eventRegistration.deleteMany({
+        where: { userId: req.user.id, eventId: event.id },
       });
       return res.json({ success: true });
     }

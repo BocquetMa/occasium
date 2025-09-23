@@ -1,39 +1,34 @@
 import { useEffect, useState } from 'react';
-import Header from '../components/Header';
-import EventCard from '../components/EventCard';
-import Pagination from '../components/Pagination';
+import AssociationCard from '../components/associations/AssociationCard';
+
+interface Association {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string;
+  logo?: string;
+}
 
 export default function Home() {
-  const [events, setEvents] = useState<any[]>([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [associations, setAssociations] = useState<Association[]>([]);
   const [search, setSearch] = useState('');
 
-  const fetchEvents = async () => {
-  try {
-    const res = await fetch(`/api/events/index?page=${page}&search=${search}`);
-    const data = await res.json();
-    console.log('API response:', data); 
-    setEvents(Array.isArray(data) ? data : []);
-    setTotalPages(1);
-  } catch (err) {
-    console.error('Fetch events failed', err);
-    setEvents([]);
-  }
-};
+  useEffect(() => {
+    fetch('/api/associations')
+      .then(res => res.json())
+      .then(data => setAssociations(data));
+  }, []);
 
-  useEffect(() => { fetchEvents(); }, [page, search]);
+  const filtered = associations.filter(a => a.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <>
-      <Header/>
-      <div className="p-4">
-        <input placeholder="Search" value={search} onChange={e => setSearch(e.target.value)} className="border p-2 mb-4 w-full"/>
-        <div className="grid md:grid-cols-3 gap-4">
-          {events.map(e => <EventCard key={e.id} {...e} />)}
-        </div>
-        <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+    <div className="container mx-auto p-4">
+      <h1 className="text-3xl font-bold mb-6 text-center">Associations</h1>
+      <input type="text" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)}
+        className="w-full p-2 mb-6 rounded border border-gray-300 focus:ring-2 focus:ring-indigo-500" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filtered.map(a => <AssociationCard key={a.id} {...a} />)}
       </div>
-    </>
+    </div>
   );
 }

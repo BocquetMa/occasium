@@ -5,81 +5,234 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DIRECT_URL")
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
-  USER
-  ORGANIZER
+  SUPER_ADMIN
+  PRESIDENT
+  VICE_PRESIDENT
+  TRESORIER
+  SECRETAIRE
   ADMIN
+  MODERATEUR
+  MEMBRE_ACTIF
+  MEMBRE
+  VISITEUR
+}
+
+enum AssociationStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  EXPELLED
+}
+
+enum EventVisibility {
+  PUBLIC
+  MEMBERS_ONLY
+  PRIVATE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  EVENT_CREATED
+  EVENT_UPDATED
+  INVITATION_RECEIVED
+  MEMBERSHIP_APPROVED
+  PHOTO_ADDED
+  ROLE_CHANGED
+  GENERAL
 }
 
 model User {
-  id            Int            @id @default(autoincrement())
-  email         String         @unique
-  password      String
-  name          String?
-  role          Role           @default(USER)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  events        Event[]        @relation("OrganizerEvents")
-  registrations Registration[]
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  firstName String?
+  lastName  String?
+  avatar    String?
+  globalRole Role    @default(VISITEUR)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships       Membership[]
+  createdAssociations Association[]     @relation("CreatedAssociations")
+  events            Event[]            @relation("EventOrganizer")
+  eventRegistrations EventRegistration[]
+  createdAlbums     PhotoAlbum[]       @relation("AlbumCreator")
+  uploadedPhotos    Photo[]            @relation("PhotoUploader")
+  sentInvitations   Invitation[]       @relation("InvitationSender")
+  notifications     Notification[]
+
+  @@map("users")
+}
+
+model Association {
+  id          Int               @id @default(autoincrement())
+  name        String
+  slug        String            @unique
+  description String?
+  logo        String?
+  website     String?
+  email       String?
+  phone       String?
+  address     String?
+  status      AssociationStatus @default(PENDING)
+  isPublic    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  createdById Int
+
+  creator     User          @relation("CreatedAssociations", fields: [createdById], references: [id])
+  memberships Membership[]
+  events      Event[]
+  albums      PhotoAlbum[]
+  invitations Invitation[]
+
+  @@map("associations")
+}
+
+model Membership {
+  id            Int              @id @default(autoincrement())
+  userId        Int
+  associationId Int
+  role          Role             @default(MEMBRE)
+  status        MembershipStatus @default(PENDING)
+  joinedAt      DateTime         @default(now())
+  notes         String?
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  association Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, associationId])
+  @@map("memberships")
 }
 
 model Event {
-  id              Int             @id @default(autoincrement())
-  title           String
-  description     String
-  location        String?
-  date            DateTime
-  capacity        Int?
-  image           String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  organizer       User?           @relation("OrganizerEvents", fields: [organizerId], references: [id])
-  organizerId     Int?
-  registrations   Registration[]
-  eventCategories EventCategory[]
-  eventTags       EventTag[]
+  id               Int             @id @default(autoincrement())
+  title            String
+  description      String
+  location         String?
+  date             DateTime
+  endDate          DateTime?
+  capacity         Int?
+  maxParticipants  Int?
+  price            Decimal?        @default(0)
+  isRecurring      Boolean         @default(false)
+  recurrenceRule   String?
+  image            String?
+  visibility       EventVisibility @default(PUBLIC)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  associationId    Int
+  organizerId      Int
+
+  association   Association         @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  organizer     User               @relation("EventOrganizer", fields: [organizerId], references: [id])
+  registrations EventRegistration[]
+  albums        PhotoAlbum[]
+
+  @@map("events")
 }
 
-model Registration {
-  id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id])
+model EventRegistration {
+  id            Int           @id @default(autoincrement())
+  userId        Int
+  eventId       Int
+  paymentStatus PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  amount        Decimal?
+  notes         String?
+  createdAt     DateTime      @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@map("event_registrations")
+}
+
+model PhotoAlbum {
+  id            Int      @id @default(autoincrement())
+  associationId Int
+  title         String
+  description   String?
+  eventId       Int?
+  isPublic      Boolean  @default(true)
+  createdById   Int
+  createdAt     DateTime @default(now())
+
+  association Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  event       Event?      @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  creator     User        @relation("AlbumCreator", fields: [createdById], references: [id])
+  photos      Photo[]
+
+  @@map("photo_albums")
+}
+
+model Photo {
+  id               Int              @id @default(autoincrement())
+  albumId          Int
+  url              String
+  caption          String?
+  uploadedById     Int
+  moderationStatus ModerationStatus @default(PENDING)
+  createdAt        DateTime         @default(now())
+
+  album      PhotoAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  uploadedBy User       @relation("PhotoUploader", fields: [uploadedById], references: [id])
+
+  @@map("photos")
+}
+
+model Invitation {
+  id            Int       @id @default(autoincrement())
+  associationId Int
+  email         String
+  role          Role      @default(MEMBRE)
+  token         String    @unique
+  expiresAt     DateTime
+  invitedById   Int
+  acceptedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  association Association @relation(fields: [associationId], references: [id], onDelete: Cascade)
+  invitedBy   User        @relation("InvitationSender", fields: [invitedById], references: [id])
+
+  @@map("invitations")
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
   userId    Int
-  event     Event    @relation(fields: [eventId], references: [id])
-  eventId   Int
-  createdAt DateTime @default(now())
-}
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  entityId  Int?
+  createdAt DateTime         @default(now())
 
-model Category {
-  id             Int            @id @default(autoincrement())
-  name           String         @unique
-  eventCategories EventCategory[]
-}
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-model Tag {
-  id       Int       @id @default(autoincrement())
-  name     String    @unique
-  eventTags EventTag[]
-}
-
-model EventCategory {
-  id         Int      @id @default(autoincrement())
-  event      Event    @relation(fields: [eventId], references: [id])
-  eventId    Int
-  category   Category @relation(fields: [categoryId], references: [id])
-  categoryId Int
-
-  @@unique([eventId, categoryId])
-}
-
-model EventTag {
-  id      Int   @id @default(autoincrement())
-  event   Event @relation(fields: [eventId], references: [id])
-  eventId Int
-  tag     Tag   @relation(fields: [tagId], references: [id])
-  tagId   Int
-
-  @@unique([eventId, tagId])
+  @@map("notifications")
 }

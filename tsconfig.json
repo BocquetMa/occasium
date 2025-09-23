@@ -19,6 +19,7 @@
     "jsx": "preserve",
     "incremental": true,
     "types": [
+      "next-auth",
       "node",
       "vitest/globals"
     ],

@@ -30,12 +30,12 @@ async function handler(req: NextApiRequest | AuthRequest, res: NextApiResponse) 
 
       if (category) {
         filteredEvents = filteredEvents.filter((e) =>
-          e.categories.some((c) => c.name === category)
-        );
+          e.categories.some((c: { name: string }) => c.name === category)
+      );
       }
       if (tag) {
         filteredEvents = filteredEvents.filter((e) =>
-          e.tags.some((t) => t.name === tag)
+          e.tags.some((t: { name: string }) => t.name === tag)
         );
       }
 
@@ -52,23 +52,31 @@ async function handler(req: NextApiRequest | AuthRequest, res: NextApiResponse) 
       if (!title || !description || !date) return res.status(400).json({ message: 'Missing required fields' });
 
       const event = await prisma.event.create({
-        data: {
-          title,
-          description,
-          location,
-          date: new Date(date),
-          capacity,
-          image,
-          organizerId: authReq.user.id,
-          eventCategories: { connect: categoryIds.map((id: number) => ({ categoryId: id })) },
-          eventTags: { connect: tagIds.map((id: number) => ({ tagId: id })) },
+      data: {
+        title,
+        description,
+        location,
+        date: new Date(date),
+        capacity,
+        image,
+        organizerId: authReq.user.id,
+        eventCategories: {
+          create: categoryIds.map((id: number) => ({
+            category: { connect: { id } },
+          })),
         },
-        include: {
-          eventCategories: { include: { category: true } },
-          eventTags: { include: { tag: true } },
-          organizer: true,
+        eventTags: {
+          create: tagIds.map((id: number) => ({
+            tag: { connect: { id } },
+          })),
         },
-      });
+      },
+      include: {
+        eventCategories: { include: { category: true } },
+        eventTags: { include: { tag: true } },
+        organizer: true,
+      },
+    });
 
       return res.status(201).json({
         ...event,

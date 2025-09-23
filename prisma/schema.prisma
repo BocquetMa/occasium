@@ -1,11 +1,10 @@
-// FILE: prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("DIRECT_URL")
 }
 
 enum Role {
@@ -75,14 +74,14 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships       Membership[]
+  memberships         Membership[]
   createdAssociations Association[]     @relation("CreatedAssociations")
-  events            Event[]            @relation("EventOrganizer")
-  eventRegistrations EventRegistration[]
-  createdAlbums     PhotoAlbum[]       @relation("AlbumCreator")
-  uploadedPhotos    Photo[]            @relation("PhotoUploader")
-  sentInvitations   Invitation[]       @relation("InvitationSender")
-  notifications     Notification[]
+  events              Event[]           @relation("EventOrganizer")
+  eventRegistrations  EventRegistration[]
+  createdAlbums       PhotoAlbum[]      @relation("AlbumCreator")
+  uploadedPhotos      Photo[]           @relation("PhotoUploader")
+  sentInvitations     Invitation[]      @relation("InvitationSender")
+  notifications       Notification[]
 
   @@map("users")
 }
@@ -148,9 +147,13 @@ model Event {
   organizerId      Int
 
   association   Association         @relation(fields: [associationId], references: [id], onDelete: Cascade)
-  organizer     User               @relation("EventOrganizer", fields: [organizerId], references: [id])
+  organizer     User                @relation("EventOrganizer", fields: [organizerId], references: [id])
   registrations EventRegistration[]
   albums        PhotoAlbum[]
+
+  // 🔥 Ajout des relations pour catégories et tags
+  eventCategories EventCategory[]
+  eventTags       EventTag[]
 
   @@map("events")
 }
@@ -235,4 +238,39 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
+}
+
+//
+// 🔥 Nouveaux modèles pour Catégories & Tags
+//
+model Category {
+  id     Int             @id @default(autoincrement())
+  name   String          @unique
+  events EventCategory[]
+}
+
+model Tag {
+  id     Int          @id @default(autoincrement())
+  name   String       @unique
+  events EventTag[]
+}
+
+model EventCategory {
+  eventId    Int
+  categoryId Int
+
+  event    Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, categoryId])
+}
+
+model EventTag {
+  eventId Int
+  tagId   Int
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, tagId])
 }

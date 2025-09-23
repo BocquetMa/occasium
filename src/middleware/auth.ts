@@ -1,7 +1,9 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient, Role } from '@prisma/client';
+import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
+const JWT_SECRET = process.env.JWT_SECRET || 'changeme';
 
 export interface AuthResult {
   user: {
@@ -11,6 +13,16 @@ export interface AuthResult {
     memberships: { role: Role; association: { slug: string } }[];
   };
   membership?: { role: Role; association: { slug: string } };
+}
+
+export interface AuthRequest extends NextApiRequest {
+  user?: {
+    id: number;
+    email: string;
+    role: Role;
+    globalRole: Role;
+    memberships: { role: Role; association: { slug: string } }[];
+  };
 }
 
 export async function checkAssociationPermission(
@@ -52,4 +64,49 @@ export function hasRole(role: Role, required: Role) {
     'SUPER_ADMIN',
   ];
   return hierarchy.indexOf(role) >= hierarchy.indexOf(required);
+}
+
+export function requireAuth(
+  handler: (req: AuthRequest, res: NextApiResponse) => Promise<void> | void
+) {
+  return async (req: NextApiRequest, res: NextApiResponse) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+
+      const token = jwt.verify(authHeader, JWT_SECRET) as { 
+        id: number; 
+        email: string; 
+        globalRole: Role;
+      };
+
+      const user = await prisma.user.findUnique({
+        where: { id: token.id },
+        include: { memberships: { include: { association: true } } },
+      });
+
+      if (!user) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+
+      const authReq = req as AuthRequest;
+      authReq.user = {
+        id: user.id,
+        email: user.email,
+        role: user.globalRole,
+        globalRole: user.globalRole,
+        memberships: user.memberships.map(m => ({
+          role: m.role,
+          association: { slug: m.association.slug }
+        }))
+      };
+
+      return handler(authReq, res);
+    } catch (error) {
+      console.error('Auth error:', error);
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+  };
 }
